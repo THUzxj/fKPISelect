@@ -1,0 +1,13 @@
+version: "3.0"
+
+services:
+  locust-headless:
+    image: locustio/locust
+    volumes:
+      - ./:/mnt/locust
+    command: -f /mnt/locust/locustfile.py,/mnt/locust/sine_wave.py -H http://192.168.121.169:30001 #  --headless
+    network_mode: "host"
+
+  locust-exporter:
+    image: containersol/locust_exporter
+    network_mode: "host"

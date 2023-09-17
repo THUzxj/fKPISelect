@@ -1,0 +1,7 @@
+**/__pycache__/
+
+dataset/
+output/
+checkpoints/
+logs/
+model_save/

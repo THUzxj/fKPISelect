@@ -1,0 +1,7 @@
+scikit-learn
+pandas
+numpy
+matplotlib
+torch
+icecream
+prometheus_pandas
