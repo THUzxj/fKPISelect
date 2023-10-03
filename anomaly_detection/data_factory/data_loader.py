@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
+
 class SegLoader:
     def __init__(self, dataset, win_size, step, mode="train"):
         self.dataset = dataset
@@ -40,3 +41,23 @@ class SegLoader:
                               index // self.step * self.win_size:index // self.step * self.win_size + self.win_size]), np.float32(
                 self.dataset.train_labels[index // self.step * self.win_size:index // self.step * self.win_size + self.win_size])
 
+
+class TimeSeriesLoader:
+    """
+    Only test dataset
+    """
+
+    def __init__(self, time_series, labels, win_size, step):
+        self.time_series = time_series
+        self.labels = labels
+        self.step = step
+        self.win_size = win_size
+
+    def __len__(self):
+        return (self.time_series.shape[0] - self.win_size) // self.win_size + 1
+
+    def __getitem__(self, index):
+        index = index * self.step
+        return np.float32(self.time_series[
+            index // self.step * self.win_size:index // self.step * self.win_size + self.win_size]), np.float32(
+            self.labels[index // self.step * self.win_size:index // self.step * self.win_size + self.win_size])

@@ -3,12 +3,20 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 
-class BaseDataset:
-    def __init__(self, data_path, scalar_class=StandardScaler) -> None:
-        self._load_data(data_path, scalar_class)
+class Dataset:
+    def __init__(self):
+        self._load_data()
 
-    def _load_data(self, data_path, scalar_class):
-        self.scaler = scalar_class()
+    def _load_data(self):
+        pass
+
+
+class ArrayDataset(Dataset):
+    def __init__(self, data_path, scaler_class=StandardScaler) -> None:
+        self._load_data(data_path, scaler_class)
+
+    def _load_data(self, data_path, scaler_class):
+        self.scaler = scaler_class()
         data = np.load(data_path + "/train.npy")
         self.scaler.fit(data)
         data = self.scaler.transform(data)
@@ -19,11 +27,8 @@ class BaseDataset:
         self.val = self.train[(int)(data_len * 0.8):]
         self.test_labels = np.load(data_path + "/labels.npy")
         self.train_labels = np.zeros(self.train.shape[0])
-        print(self.train.shape)
 
-    def _select_kpis(self, select_file):
-        selected_kpis = np.loadtxt(select_file, dtype=np.int32)
-        print(selected_kpis)
+    def select_kpis(self, selected_kpis):
         self.train = self.train[:, selected_kpis]
         self.test = self.test[:, selected_kpis]
 
@@ -33,9 +38,9 @@ class BaseDataset:
         print("test labels shape:", self.test_labels.shape)
 
 
-class CSVDataset(BaseDataset):
-    def _load_data(self, data_path, scalar_class):
-        self.scaler = scalar_class()
+class CSVDataset(ArrayDataset):
+    def _load_data(self, data_path, scaler_class):
+        self.scaler = scaler_class()
         data = pd.read_csv(data_path + "/train.csv", index_col=0).values
         self.scaler.fit(data)
         data = self.scaler.transform(data)
@@ -50,35 +55,13 @@ class CSVDataset(BaseDataset):
         print(self.train.shape)
 
 
-class SelectDataset(BaseDataset):
-    def __init__(self, data_path, select_file, scalar_class=StandardScaler):
-        self._load_data(data_path, scalar_class)
-        self._select_kpis(select_file)
-
-
-class SelectCSVDataset(CSVDataset):
-    def __init__(self, data_path, select_file, scalar_class=StandardScaler):
-        self._load_data(data_path, scalar_class)
-        self._select_kpis(select_file)
-
-
-def get_dataset_v2(data_path, dataset, scalar_class, select_file=None):
+def get_dataset(data_path, dataset, scaler_class):
     if (dataset == 'SMD'):
-        dataset = BaseDataset(data_path, scalar_class)
-    elif (dataset == 'WADI'):
-        dataset = BaseDataset(data_path, scalar_class)
-    elif (dataset == 'MUL'):
-        dataset = BaseDataset(data_path, scalar_class)
-    elif (dataset.startswith("SMDSELECT")):
-        dataset = SelectDataset(data_path, select_file, scalar_class)
+        dataset = ArrayDataset(data_path, scaler_class)
     elif (dataset == 'PROMEV2'):
-        dataset = CSVDataset(data_path, scalar_class)
-    elif (dataset.startswith('PROMESELECTV2')):
-        dataset = SelectCSVDataset(data_path, select_file, scalar_class)
-    elif (dataset == 'special'):
-        dataset = BaseDataset(data_path, scalar_class)
+        dataset = CSVDataset(data_path, scaler_class)
     elif (dataset == 'synthetic'):
-        dataset = BaseDataset(data_path, scalar_class)
+        dataset = ArrayDataset(data_path, scaler_class)
     else:
-        dataset = BaseDataset(data_path, scalar_class)
+        dataset = ArrayDataset(data_path, scaler_class)
     return dataset

@@ -46,7 +46,6 @@ class UsadSolver(Solver):
     
     def train(self):
         opt_func = torch.optim.Adam
-        print(self.model)
         print("======================TRAIN MODE======================")
         history = []
         optimizer1 = opt_func(list(self.model.encoder.parameters())+list(self.model.decoder1.parameters()))
@@ -70,8 +69,6 @@ class UsadSolver(Solver):
                 loss1.backward()
                 optimizer1.step()
                 optimizer1.zero_grad()
-                
-                
                 #Train AE2
                 loss1,loss2 = self.model.training_step(batch,epoch+1)
                 loss2.backward()
@@ -84,15 +81,12 @@ class UsadSolver(Solver):
 
             early_stopping(result["val_loss1"], result["val_loss2"], self.model, path)
             self.model.epoch_end(epoch, result)
-            self._test_performance(self.test_loader)
+            # self._test_performance(self.test_loader)
             history.append(result)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
         return history
-
-        # history = training(200, self.model, self.train_loader, self.vali_loader, self.w_size, checkpoint_path = self.model_save_path)
-        # plot_history_save(history, os.path.join(self.output_file, "train.png"))
 
     def _calculate_score(self, data_loader, alpha, beta):
         results = []
@@ -150,14 +144,13 @@ class UsadSolver(Solver):
         for i, (input_data, labels) in enumerate(loader):
             test_labels.append(labels)
         test_labels = torch.cat(test_labels, dim=0).detach().cpu().numpy()
-        # test_labels = np.any(test_labels == 1, axis=1)
         test_labels = test_labels[:, 0]
-        # test_labels = loader.dataset.train_labels[:results.shape[0]]
 
-        self._statistics(results, combined_energy, test_labels)
+        thresh, pred = self._statistics(results, combined_energy, test_labels)
+        np.save(os.path.join(self.output_dir, "pred.npy"), pred)
+
 
     def _test(self, loader):
-        print(self.model)
         checkpoint_path = os.path.join(self.model_save_path, str(self.model_name) + '_checkpoint.pth')
         self.model.load_state_dict(
             torch.load(

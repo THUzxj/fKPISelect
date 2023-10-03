@@ -14,16 +14,14 @@ def my_kl_loss(p, q):
     res = p * (torch.log(p + 0.0001) - torch.log(q + 0.0001))
     return torch.mean(torch.sum(res, dim=-1), dim=1)
 
+
 class AnomalyTransformerSolver(Solver):
     def __init__(self, config):
         super(AnomalyTransformerSolver, self).__init__(config)
-        self.build_model()
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.criterion = nn.MSELoss()
-        self.model_loaded = False
 
     def build_model(self):
-        self.model = AnomalyTransformer(win_size=self.win_size, enc_in=self.input_c, c_out=self.output_c, e_layers=3)
+        self.model = AnomalyTransformer(
+            win_size=self.win_size, enc_in=self.input_c, c_out=self.output_c, e_layers=3)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         if torch.cuda.is_available():
@@ -44,8 +42,8 @@ class AnomalyTransformerSolver(Solver):
             prior_loss = 0.0
             for u in range(len(prior)):
                 series_loss += (torch.mean(my_kl_loss(series[u], (
-                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                               self.win_size)).detach())) + torch.mean(
+                    prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                           self.win_size)).detach())) + torch.mean(
                     my_kl_loss(
                         (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                                 self.win_size)).detach(),
@@ -74,21 +72,21 @@ class AnomalyTransformerSolver(Solver):
         path = self.model_save_path
         if not os.path.exists(path):
             os.makedirs(path)
-        early_stopping = EarlyStopping(patience=self.patience, verbose=True, checkpoint_name=self.model_name)
+        early_stopping = EarlyStopping(
+            patience=self.patience, verbose=True, checkpoint_name=self.model_name)
         train_steps = len(self.train_loader)
 
         if (self.model_init_checkpoint):
             checkpoint = torch.load(self.model_init_checkpoint)
             self.model.load_state_dict(checkpoint)
 
-
         for epoch in range(self.num_epochs):
             iter_count = 0
             loss1_list = []
             self.model.train()
-            
+
             epoch_time = time.time()
-            
+
             for i, (input_data, labels) in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
                 iter_count += 1
@@ -101,8 +99,8 @@ class AnomalyTransformerSolver(Solver):
                 prior_loss = 0.0
                 for u in range(len(prior)):
                     series_loss += (torch.mean(my_kl_loss(series[u], (
-                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach())) + torch.mean(
+                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                               self.win_size)).detach())) + torch.mean(
                         my_kl_loss((prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                                            self.win_size)).detach(),
                                    series[u])))
@@ -111,8 +109,8 @@ class AnomalyTransformerSolver(Solver):
                                                                                                 self.win_size)),
                         series[u].detach())) + torch.mean(
                         my_kl_loss(series[u].detach(), (
-                                prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                       self.win_size)))))
+                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                                   self.win_size)))))
                 series_loss = series_loss / len(prior)
                 prior_loss = prior_loss / len(prior)
 
@@ -124,8 +122,10 @@ class AnomalyTransformerSolver(Solver):
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
-                    left_time = speed * ((self.num_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    left_time = speed * \
+                        ((self.num_epochs - epoch) * train_steps - i)
+                    print(
+                        '\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
 
@@ -134,7 +134,8 @@ class AnomalyTransformerSolver(Solver):
                 loss2.backward()
                 self.optimizer.step()
 
-            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            print("Epoch: {} cost time: {}".format(
+                epoch + 1, time.time() - epoch_time))
             train_loss = np.average(loss1_list)
 
             vali_loss1, vali_loss2 = self.vali(self.test_loader)
@@ -156,16 +157,16 @@ class AnomalyTransformerSolver(Solver):
         for u in range(len(prior)):
             if u == 0:
                 series_loss = my_kl_loss(series[u], (
-                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                self.win_size)).detach()) * temperature
+                    prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                           self.win_size)).detach()) * temperature
                 prior_loss = my_kl_loss(
                     (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                             self.win_size)),
                     series[u].detach()) * temperature
             else:
                 series_loss += my_kl_loss(series[u], (
-                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                self.win_size)).detach()) * temperature
+                    prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                           self.win_size)).detach()) * temperature
                 prior_loss += my_kl_loss(
                     (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                             self.win_size)),
@@ -190,16 +191,16 @@ class AnomalyTransformerSolver(Solver):
             for u in range(len(prior)):
                 if u == 0:
                     series_loss = my_kl_loss(series[u], (
-                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach()) * temperature
+                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                               self.win_size)).detach()) * temperature
                     prior_loss = my_kl_loss(
                         (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                                 self.win_size)),
                         series[u].detach()) * temperature
                 else:
                     series_loss += my_kl_loss(series[u], (
-                            prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
-                                                                                                   self.win_size)).detach()) * temperature
+                        prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
+                                                                                               self.win_size)).detach()) * temperature
                     prior_loss += my_kl_loss(
                         (prior[u] / torch.unsqueeze(torch.sum(prior[u], dim=-1), dim=-1).repeat(1, 1, 1,
                                                                                                 self.win_size)),
@@ -212,20 +213,31 @@ class AnomalyTransformerSolver(Solver):
 
             if self.inspect_scores:
                 loss_per_kpi = criterion(input, output)
-                reconstruction_loss_per_kpi.append(loss_per_kpi.detach().cpu().numpy())
-                cri_per_kpi = metric.unsqueeze(1) * loss_per_kpi.transpose(1, 2) # np.matmul(metric, loss_per_kpi, axes=([1], [1]))
-                attens_energy_per_kpi.append(cri_per_kpi.detach().cpu().numpy())
+                reconstruction_loss_per_kpi.append(
+                    loss_per_kpi.detach().cpu().numpy())
+                # np.matmul(metric, loss_per_kpi, axes=([1], [1]))
+                cri_per_kpi = metric.unsqueeze(
+                    1) * loss_per_kpi.transpose(1, 2)
+                attens_energy_per_kpi.append(
+                    cri_per_kpi.detach().cpu().numpy())
                 inputs.append(input.detach().cpu().numpy())
                 outputs.append(output.detach().cpu().numpy())
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
         if self.inspect_scores and self.mode == "test":
-            reconstruction_loss_per_kpi = np.concatenate(reconstruction_loss_per_kpi, axis=0)
-            reconstruction_loss_per_kpi = reconstruction_loss_per_kpi.reshape(-1, reconstruction_loss_per_kpi.shape[-1])
-            attens_energy_per_kpi = np.concatenate(attens_energy_per_kpi, axis=0).transpose((0, 2, 1))
-            attens_energy_per_kpi = attens_energy_per_kpi.reshape(-1, attens_energy_per_kpi.shape[-1])
-            np.save(os.path.join(self.output_dir, "reconstruction_loss_per_kpi.npy"), reconstruction_loss_per_kpi)
-            np.save(os.path.join(self.output_dir, "attens_energy_per_kpi.npy"), attens_energy_per_kpi)
-            np.save(os.path.join(self.output_dir, "attens_energy.npy"), attens_energy)
+            reconstruction_loss_per_kpi = np.concatenate(
+                reconstruction_loss_per_kpi, axis=0)
+            reconstruction_loss_per_kpi = reconstruction_loss_per_kpi.reshape(
+                -1, reconstruction_loss_per_kpi.shape[-1])
+            attens_energy_per_kpi = np.concatenate(
+                attens_energy_per_kpi, axis=0).transpose((0, 2, 1))
+            attens_energy_per_kpi = attens_energy_per_kpi.reshape(
+                -1, attens_energy_per_kpi.shape[-1])
+            np.save(os.path.join(
+                self.output_dir, "reconstruction_loss_per_kpi.npy"), reconstruction_loss_per_kpi)
+            np.save(os.path.join(self.output_dir,
+                    "attens_energy_per_kpi.npy"), attens_energy_per_kpi)
+            np.save(os.path.join(self.output_dir,
+                    "attens_energy.npy"), attens_energy)
 
             inputs = np.concatenate(inputs, axis=0)
             outputs = np.concatenate(outputs, axis=0)
@@ -233,20 +245,23 @@ class AnomalyTransformerSolver(Solver):
             np.save(os.path.join(self.output_dir, "inputs.npy"), inputs)
             np.save(os.path.join(self.output_dir, "outputs.npy"), outputs)
         return np.array(attens_energy)
-    
+
     def _test_performance(self, loader):
         with torch.no_grad():
             self.model.eval()
             temperature = 50
-            criterion = nn.MSELoss(reduce=False)
+            criterion = nn.MSELoss(reduction='none')
 
             # (1) stastic on the train set
-            train_energy = self._calculate_energy(criterion, temperature, self.train_loader)
+            train_energy = self._calculate_energy(
+                criterion, temperature, self.train_loader)
 
             # (2) find the threshold
-            test_energy = self._calculate_energy(criterion, temperature, self.thre_loader)
+            test_energy = self._calculate_energy(
+                criterion, temperature, self.thre_loader)
 
-            combined_energy = np.concatenate([train_energy, test_energy], axis=0)
+            combined_energy = np.concatenate(
+                [train_energy, test_energy], axis=0)
 
             # (3) evaluation on the test set
             test_labels = []
@@ -254,8 +269,11 @@ class AnomalyTransformerSolver(Solver):
                 test_labels.append(labels)
             test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
             test_labels = np.array(test_labels)
-            test_energy = self._calculate_energy(criterion, temperature, loader)
-            self._statistics(test_energy, combined_energy, test_labels)
+            test_energy = self._calculate_energy(
+                criterion, temperature, loader)
+            thresh, pred = self._statistics(
+                test_energy, combined_energy, test_labels)
+        return test_labels, test_energy, thresh, pred
 
     def _test(self, loader):
         self.load_model()
@@ -267,7 +285,7 @@ class AnomalyTransformerSolver(Solver):
 
     def test(self):
         self._test(self.thre_loader)
-    
+
     def test_on_train_data(self):
         self._test(self.thre_on_train_loader)
 
@@ -277,7 +295,7 @@ class AnomalyTransformerSolver(Solver):
             input = input_data.float().to(self.device)
             output, series, prior, _ = self.model(input)
             loss = torch.mean(criterion(input, output), dim=-1)
-            cri = torch.mean(loss, dim = 1)
+            cri = torch.mean(loss, dim=1)
             cri = cri.detach().cpu().numpy()
             attens_energy.append(cri)
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
@@ -289,15 +307,18 @@ class AnomalyTransformerSolver(Solver):
         with torch.no_grad():
             self.model.eval()
             temperature = 50
-            criterion = nn.MSELoss(reduce=False)
+            criterion = nn.MSELoss(reduction='none')
 
             # (1) stastic on the train set
-            train_energy = self._calculate_energy_only_reconstruction(criterion, temperature, self.train_loader)
+            train_energy = self._calculate_energy_only_reconstruction(
+                criterion, temperature, self.train_loader)
 
             # (2) find the threshold
-            test_energy = self._calculate_energy_only_reconstruction(criterion, temperature, self.test_loader)
+            test_energy = self._calculate_energy_only_reconstruction(
+                criterion, temperature, self.test_loader)
 
-            combined_energy = np.concatenate([train_energy, test_energy], axis=0)
+            combined_energy = np.concatenate(
+                [train_energy, test_energy], axis=0)
 
             # (3) evaluation on the test set
             test_labels = []
@@ -356,7 +377,7 @@ class AnomalyTransformerSolver(Solver):
                 outputs.append(output.detach().cpu().numpy())
                 all_labels.append(labels)
                 metrics.append(metric)
-            
+
         inputs = np.concatenate(inputs, axis=0)
         outputs = np.concatenate(outputs, axis=0)
         print("input output shape:", inputs.shape, outputs.shape)
@@ -364,7 +385,7 @@ class AnomalyTransformerSolver(Solver):
         np.save(os.path.join(self.output_dir, "test_outputs.npy"), outputs)
         all_labels = np.concatenate(all_labels, axis=0)
         print(all_labels.shape)
-        all_labels = np.any(np.array(all_labels)==1, axis=1)
+        all_labels = np.any(np.array(all_labels) == 1, axis=1)
         print(all_labels.shape)
         np.save(os.path.join(self.output_dir, "test_labels.npy"), all_labels)
 

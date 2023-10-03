@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+
 def write_event_results(event_pred, output_file):
     f = open(output_file, 'w')
     for pred in event_pred:
@@ -8,13 +9,9 @@ def write_event_results(event_pred, output_file):
 
 
 def write_results(y_test, y_pred, y_score, output_file):
-    # f = open(output_file, "w")
-    # f.write("test,pred,score\n")
-    print(y_test.shape, y_pred.shape, y_score.shape)
     df = pd.DataFrame({"test": y_test, "pred": y_pred, "score": y_score})
     df.to_csv(output_file, index=False)
-    # for test, pred, score in zip(y_test, y_pred, y_score):
-    #     f.write(f"{test}, {pred}, {score}\n")
+
 
 def write_info(accuracy, anomaly_ratio, threshold, precision, recall, f1, output_file):
     f = open(output_file, "w")

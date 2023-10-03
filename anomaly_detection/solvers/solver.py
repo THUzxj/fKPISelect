@@ -9,11 +9,12 @@ from torch.utils.data import DataLoader
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score
 
-from anomaly_detection.data_factory.dataset import get_dataset_v2
+from anomaly_detection.data_factory.dataset import get_dataset
 from anomaly_detection.data_factory.data_loader import SegLoader
 from anomaly_detection.solvers.utils import write_event_results, write_results, write_info
-from anomaly_detection.metric import calc_anomaly_event, point_adjustment, my_event_f1
+from anomaly_detection.metric import calc_anomaly_event, point_adjustment, calc_event_f1
 
 
 def adjust_learning_rate(optimizer, epoch, lr_):
@@ -134,68 +135,40 @@ def statistics_single_threshold_point_adjustment(test_energy, thresh, test_label
     return origin_pred, accuracy, f1_data, anomaly_event_hit
 
 
-def statistics_single_threshold(test_energy, thresh, test_labels):
-    pred = (test_energy > thresh).astype(int)
+def statistics_metrics(pred, test_labels):
     origin_pred = pred.copy()
-
     gt = test_labels.astype(int)
 
-    # print("pred:   ", pred.shape)
-    # print("gt:     ", gt.shape)
+    # Calculate F1 with origin prediction and labels
+    origin_precision, origin_recall, origin_f_score, support = precision_recall_fscore_support(gt, origin_pred,
+                                                                                               average='binary')
 
     # detection adjustment
     # labels
     pred = point_adjustment(gt, pred)
 
     anomaly_event_hit = calc_anomaly_event(gt, pred)
-    # if event_output_file:
-    #     write_event_results(anomaly_event_hit, event_output_file)
 
     pred = np.array(pred)
     gt = np.array(gt)
-    # print("pred: ", pred.shape)
-    # print("gt:   ", gt.shape)
 
-    from sklearn.metrics import precision_recall_fscore_support
-    from sklearn.metrics import accuracy_score
+    # Calculate F1 with point adjustment method
     accuracy = accuracy_score(gt, pred)
     precision, recall, f_score, support = precision_recall_fscore_support(
         gt, pred, average='binary')
-    # print(
-    #     "adjusted: Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F1-score : {:0.4f} ".format(
-    #         accuracy, precision,
-    #         recall, f_score))
 
-    origin_precision, origin_recall, origin_f_score, support = precision_recall_fscore_support(gt, origin_pred,
-                                                                                               average='binary')
-    # print(
-    #     "Origin: Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F1-score : {:0.4f} ".format(
-    #         accuracy, origin_precision,
-    #         origin_recall, origin_f_score))
-
-    if origin_precision + recall == 0:
-        my_f1_score = 0
-    else:
-        my_f1_score = 2 * (origin_precision * recall) / \
-            (origin_precision + recall)
-
-    # print("My Point Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F1-score : {:0.4f}".format(
-    #     accuracy, origin_precision, recall, my_f1_score))
-
-    event_precision, event_recall, event_f1 = my_event_f1(gt, origin_pred)
-
-    # if(output_file):
-    #     write_results(gt, pred, test_energy, output_file)
+    # Calculate F1 with event view
+    event_precision, event_recall, event_f1 = calc_event_f1(gt, origin_pred)
 
     f1_data = pd.DataFrame(
         {
             'precision': [origin_precision, precision, event_precision],
-            'recall': [recall, recall, event_recall],
-            'f1': [my_f1_score, f_score, event_f1]
+            'recall': [origin_recall, recall, event_recall],
+            'f1': [origin_f_score, f_score, event_f1]
         }
     )
 
-    return origin_pred, accuracy, f1_data, anomaly_event_hit
+    return accuracy, f1_data, anomaly_event_hit
 
 
 class Solver(object):
@@ -205,34 +178,39 @@ class Solver(object):
         self.inspect_scores = False
         self.multiple_anomaly_ratios = False
         self.model_init_checkpoint = None
+        self.save_output = False
 
         self.__dict__.update(config)
         print('config: ', config)
 
         if self.scaler == "standard":
-            scaler_class = StandardScaler
+            self.scaler_class = StandardScaler
         elif self.scaler == "minmax":
-            scaler_class = MinMaxScaler
+            self.scaler_class = MinMaxScaler
 
-        self.dataset_loader = get_dataset_v2(
-            self.data_path, self.dataset, scaler_class, self.select_file)
-        self.train_loader = DataLoader(dataset=SegLoader(self.dataset_loader, win_size=self.win_size, step=1, mode="train"),
-                                       batch_size=self.batch_size, shuffle=True, num_workers=0)
-        self.vali_loader = DataLoader(dataset=SegLoader(self.dataset_loader, win_size=self.win_size, step=1, mode="val"),
-                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
-        self.test_loader = DataLoader(dataset=SegLoader(self.dataset_loader, win_size=self.win_size, step=1, mode="test"),
-                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
-        self.thre_loader = DataLoader(dataset=SegLoader(self.dataset_loader, win_size=self.win_size, step=1, mode="thre"),
-                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
-
-        self.train_input_loader = DataLoader(dataset=SegLoader(self.dataset_loader, win_size=self.win_size, step=1, mode="thre_on_train"),
-                                             batch_size=self.batch_size, shuffle=False, num_workers=0)
-
+        if self.data_path:
+            dataset_object = get_dataset(
+                self.data_path, self.dataset, self.scaler_class)
+            self.load_dataset_object(dataset_object)
         self.device = torch.device(
             "cuda:0" if torch.cuda.is_available() else "cpu")
         self.build_model()
         self.criterion = nn.MSELoss()
         self.model_loaded = False
+
+    def load_dataset_object(self, dataset_object):
+        self.dataset_object = dataset_object
+        self.train_loader = DataLoader(dataset=SegLoader(self.dataset_object, win_size=self.win_size, step=1, mode="train"),
+                                       batch_size=self.batch_size, shuffle=True, num_workers=0)
+        self.vali_loader = DataLoader(dataset=SegLoader(self.dataset_object, win_size=self.win_size, step=1, mode="val"),
+                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
+        self.test_loader = DataLoader(dataset=SegLoader(self.dataset_object, win_size=self.win_size, step=1, mode="test"),
+                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
+        self.thre_loader = DataLoader(dataset=SegLoader(self.dataset_object, win_size=self.win_size, step=1, mode="thre"),
+                                      batch_size=self.batch_size, shuffle=False, num_workers=0)
+
+        self.train_input_loader = DataLoader(dataset=SegLoader(self.dataset_object, win_size=self.win_size, step=1, mode="thre_on_train"),
+                                             batch_size=self.batch_size, shuffle=False, num_workers=0)
 
     def build_model(self):
         pass
@@ -293,155 +271,32 @@ class Solver(object):
             self.model_loaded = True
 
     def _statistics(self, test_scores, thre_scores, test_labels):
-        if self.multiple_anomaly_ratios:
-            # accuracy, precision, recall, f_score = self._statistics_multi_threshold_binary_search(
-            #     test_scores, thre_scores, test_labels)
-            accuracy, precision, recall, f_score = self._statistics_multi_threshold(
-                test_scores, thre_scores, test_labels)
-        else:
-            self._statistics_single_percentage(
-                test_scores, thre_scores, test_labels, self.anomaly_ratio)
-
-    def _statistics_multi_threshold(self, test_scores, thre_scores, test_labels):
-        os.makedirs(self.output_dir, exist_ok=True)
-
-        # anomaly_ratios = np.array([0.025, 0.125, 0.25, 0.5, 1.0, 1.5, 2.0])
-        # anomaly_ratios = np.arange(0, 3, step=0.05)
-        anomaly_ratios = np.array(
-            [0.05, 0.1, 0.15, 0.2, 0.25, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0])
-        # anomaly_ratios = np.concatenate([anomaly_ratios, np.array([5, 10, 20, 30])])
-        print("anomaly_ratios: ", anomaly_ratios)
-        results = []
-        f1_datas = []
-        print("thre_scores: ", thre_scores)
-        os.makedirs(os.path.join(self.output_dir, "results"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "events"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "f1"), exist_ok=True)
-
-        for anomaly_ratio in anomaly_ratios:
-            print("anomaly_ratio: ", anomaly_ratio)
-            thresh = np.percentile(thre_scores, 100 - anomaly_ratio)
-            print("Threshold :", thresh)
-
-            output_file = os.path.join(
-                self.output_dir, "results", "results_{}_{}.txt".format(self.dataset, anomaly_ratio))
-            event_output_file = os.path.join(
-                self.output_dir, "events", "event_results_{}_{}.txt".format(self.dataset, anomaly_ratio))
-
-            pred, accuracy, f1_data, anomaly_event_hit = statistics_single_threshold(
-                test_scores, thresh, test_labels)
-            print(test_labels.shape, pred.shape, test_scores.shape)
-            write_results(test_labels.reshape(-1), pred,
-                          test_scores, output_file)
-            write_event_results(anomaly_event_hit, event_output_file)
-
-            f1_data.to_csv(os.path.join(
-                self.output_dir, "f1", "f1_{}_{}.txt".format(self.dataset, anomaly_ratio)))
-
-            # print("anomaly_ratio: ", anomaly_ratio, "threshold: ", thresh, "accuracy: ",
-            #       accuracy, "precision: ", precision, "recall: ", recall, "f_score: ", f_score)
-
-            results.append(
-                [float(anomaly_ratio), float(thresh), float(accuracy)])
-            f1_datas.append(f1_data)
-
-        # print(results)
-        results = np.array(results, dtype=object)
-
-        f1_datas_values = np.array([f1_data.values for f1_data in f1_datas])
-
-        adjust_index = np.argmax(f1_datas_values[:, 1, 2])
-        f1_datas[adjust_index].to_csv(os.path.join(
-            self.output_dir, "adjusted_max_f1.txt"))
-        anomaly_ratio, thresh, accuracy = results[adjust_index]
-        write_info(accuracy, anomaly_ratio, thresh, f1_datas_values[adjust_index][1][0], f1_datas_values[adjust_index]
-                   [1][1], f1_datas_values[adjust_index][1][2], os.path.join(self.output_dir, "adjusted_info.txt"))
-
-        my_index = np.argmax(f1_datas_values[:, 0, 2])
-        f1_datas[my_index].to_csv(os.path.join(
-            self.output_dir, "my_max_f1.txt"))
-        anomaly_ratio, thresh, accuracy = results[my_index]
-        write_info(accuracy, anomaly_ratio, thresh, f1_datas_values[my_index][0][0], f1_datas_values[my_index]
-                   [0][1], f1_datas_values[my_index][0][2], os.path.join(self.output_dir, "my_info.txt"))
-
-        event_index = np.argmax(f1_datas_values[:, 2, 2])
-        print(f1_datas_values[:, 2, 2])
-        f1_datas[event_index].to_csv(os.path.join(
-            self.output_dir, "event_max_f1.txt"))
-        anomaly_ratio, thresh, accuracy = results[event_index]
-        write_info(accuracy, anomaly_ratio, thresh, f1_datas_values[event_index][2][0], f1_datas_values[event_index]
-                   [2][1], f1_datas_values[event_index][2][2], os.path.join(self.output_dir, "event_info.txt"))
-
-        return accuracy, f1_datas[event_index]["precision"][2], f1_datas[event_index]["recall"][2], f1_datas[event_index]["f1"][2]
+        return self._statistics_single_percentage(
+            test_scores, thre_scores, test_labels, self.anomaly_ratio)
 
     def _statistics_single_percentage(self, test_scores, thre_scores, test_labels, anomaly_ratio):
         thresh = np.percentile(thre_scores, 100 - anomaly_ratio)
-        os.makedirs(os.path.join(self.output_dir, "results"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "events"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "f1"), exist_ok=True)
-        output_file = os.path.join(
-            self.output_dir, "results", "results_{}_{}.txt".format(self.dataset, anomaly_ratio))
-        event_output_file = os.path.join(
-            self.output_dir, "events", "event_results_{}_{}.txt".format(self.dataset, anomaly_ratio))
-
-        pred, accuracy, f1_data, anomaly_event_hit = statistics_single_threshold(
-            test_scores, thresh, test_labels)
+        pred = (test_scores > thresh).astype(int)
+        accuracy, f1_data, anomaly_event_hit = statistics_metrics(
+            pred, test_labels)
         print("anomaly_ratio: ", anomaly_ratio,
               "threshold: ", thresh, "accuracy: ", accuracy)
         print(f1_data)
 
-        # write_results(test_labels, pred, test_scores, output_file)
-        write_event_results(anomaly_event_hit, event_output_file)
+        if self.save_output:
+            os.makedirs(os.path.join(
+                self.output_dir, "results"), exist_ok=True)
+            os.makedirs(os.path.join(self.output_dir, "events"), exist_ok=True)
+            os.makedirs(os.path.join(self.output_dir, "f1"), exist_ok=True)
+            output_file = os.path.join(
+                self.output_dir, "results", "results_{}_{}.csv".format(self.dataset, anomaly_ratio))
+            event_output_file = os.path.join(
+                self.output_dir, "events", "event_results_{}_{}.txt".format(self.dataset, anomaly_ratio))
 
-        f1_data.to_csv(os.path.join(
-            self.output_dir, "f1", "f1_{}_{}.txt".format(self.dataset, anomaly_ratio)))
+            write_results(test_labels, pred, test_scores, output_file)
+            write_event_results(anomaly_event_hit, event_output_file)
 
-    def _statistics_multi_threshold_binary_search(self, test_scores, thre_scores, test_labels):
-        os.makedirs(self.output_dir, exist_ok=True)
+            f1_data.to_csv(os.path.join(
+                self.output_dir, "f1", "f1_{}_{}.csv".format(self.dataset, anomaly_ratio)))
 
-        lower_bound = 0.0
-        upper_bound = 100.0
-        max_iterations = 50
-        tolerance = 0.01
-
-        result = None
-
-        # Perform a binary search to find the threshold that maximizes the F1 score
-        for i in range(max_iterations):
-            # Calculate the midpoint
-            midpoint = (lower_bound + upper_bound) / 2
-
-            accuracy, precision, recall, f_score, adjusted_data = self._statistics_single_percentage(
-                test_scores, thre_scores, test_labels, midpoint)
-
-            result = [midpoint, accuracy, precision,
-                      recall, f_score, adjusted_data]
-
-            accuracy_2, precision_2, recall_2, f_score_2, adjusted_data = self._statistics_single_percentage(
-                test_scores, thre_scores, test_labels, midpoint + tolerance)
-
-            i = 2
-            while f_score == f_score_2:
-                accuracy_2, precision_2, recall_2, f_score_2, adjusted_data = self._statistics_single_percentage(
-                    test_scores, thre_scores, test_labels, midpoint + tolerance * i)
-                i += 1
-
-            if f_score > f_score_2:
-                upper_bound = midpoint
-            else:
-                lower_bound = midpoint
-
-            if abs(upper_bound - lower_bound) < tolerance:
-                break
-        # print("max f1: ")
-        # threshold = np.percentile(thre_scores, 100 - result[0])
-        # print("anomaly_ratio: ", result[0], "threshold: ", threshold, "accuracy: ",
-        #       accuracy, "precision: ", precision, "recall: ", recall, "f_score: ", f_score)
-        # write_scores(accuracy, precision, recall, f_score, result[0], os.path.join(
-        #     self.output_dir, "scores_binary_{}.txt".format(self.dataset)))
-
-        # with open(os.path.join(
-        #         self.output_dir, "scores_binary_{}.txt".format(self.dataset)), 'a') as f:
-        #     f.write(
-        #         f"{accuracy},{adjusted_data[0]},{adjusted_data[1]},{adjusted_data[2]}\n")
-        return accuracy, precision, recall, f_score
+        return thresh, pred

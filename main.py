@@ -18,7 +18,6 @@ def getArgs():
     parser.add_argument('--input_c', type=int, default=38)
     parser.add_argument('--output_c', type=int, default=38)
     parser.add_argument('--batch_size', type=int, default=1024)
-    parser.add_argument('--pretrained_model', type=str, default=None)
     parser.add_argument('--dataset', type=str, default='credit')
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'test_on_train', 'cluster'])
     parser.add_argument('--data_path', type=str, default='./dataset/creditcard_ts.csv')
@@ -45,9 +44,9 @@ def getArgs():
     
     parser.add_argument('--inspect_scores', action='store_true')
     parser.add_argument('--save_input_output', action='store_true')
+    parser.add_argument('--save_output', action='store_true')
     parser.add_argument('--scaler', type=str, default='standard', choices=['standard', 'minmax'])
     parser.add_argument('--log_step', type=int, default=100)
-    parser.add_argument('--score_method', type=str, default='mse')
     parser.add_argument('--select_file', type=str)
 
     config = parser.parse_args()
