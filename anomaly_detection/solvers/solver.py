@@ -162,6 +162,7 @@ def statistics_metrics(pred, test_labels):
 
     f1_data = pd.DataFrame(
         {
+            'type': ['origin F1', 'Point Adjustment F1', 'Event F1'], 
             'precision': [origin_precision, precision, event_precision],
             'recall': [origin_recall, recall, event_recall],
             'f1': [origin_f_score, f_score, event_f1]

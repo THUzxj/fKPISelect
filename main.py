@@ -5,7 +5,6 @@ from torch.backends import cudnn
 from anomaly_detection.solvers import UsadSolver, AnomalyTransformerSolver
 
 from anomaly_detection.utils import get_default_device
-from anomaly_detection.cluster import generate_feature_latents
 
 
 def getArgs():
@@ -82,9 +81,8 @@ if __name__ == "__main__":
         solver.test()
     elif config.mode == 'test_on_train':
         solver.test_on_train_data()
-    elif config.mode == 'cluster':
-        generate_feature_latents(config, solver)
 
+    
     if config.save_input_output:
         if config.mode == 'train':
             solver.save_train_input_output()
