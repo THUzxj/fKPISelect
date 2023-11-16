@@ -104,7 +104,9 @@ def merge_kpis_to_single_df(tses, filter=False):
 
     merged_kpis = tses[0]
     for ts in tses[1:]:
-        merged_kpis = pd.merge(merged_kpis, ts, on='timestamp', how='outer')
+        merged_kpis = pd.merge(
+            merged_kpis, ts, on='timestamp', how='outer')
+        del ts
     return merged_kpis
 
 
